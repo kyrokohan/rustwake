@@ -1,8 +1,6 @@
 package main
 
 import (
-	"math"
-
 	"glonk.dev/engine"
 	"glonk.dev/geometry"
 	"glonk.dev/mesh"
@@ -51,7 +49,6 @@ type game struct {
 	enemies []*enemy
 	bolts   []bolt
 	pickups []spawn // the health and ammo still lying on the map
-	spin    float64 // seconds played, which turns the pickups
 }
 
 // newGame returns the game main runs: the first map, behind the title menu.
@@ -103,7 +100,6 @@ func (g *game) Update(dt float64, in *engine.Input) error {
 	g.updateEnemies(dt)
 	g.updateBolts(dt)
 	g.collect()
-	g.spin += dt
 
 	if g.health <= 0 {
 		g.health = 0
@@ -154,23 +150,23 @@ func (g *game) drawWorld(fb *engine.FrameBuffer) {
 	if g.flash > 0 {
 		lit = append(lit, mesh.Point{Position: cam.Position, Range: 4 * lampRange})
 	}
-	glow := mesh.Ambient{Level: 1} // for what gives light of its own
 
+	// The exit, the pickups and the bolts give light of their own, so they are drawn as
+	// bright as they are. A machine is lit as the walls are, but for the flash of a hit.
 	g.lvl.mesh.DrawShadedPixels(c, cam, lit...)
-	put(c, cam, exitModel, g.lvl.exit, 0, glow)
+	stand(c, cam, exitLook, g.lvl.exit, 1)
 	for _, p := range g.pickups {
-		put(c, cam, pickupModels[p.kind], p.at, 2*g.spin, glow)
+		stand(c, cam, pickupLooks[p.kind], p.at, 1)
 	}
 	for _, b := range g.bolts {
-		put(c, cam, boltModel, b.pos, 0, glow)
+		stand(c, cam, boltLook, b.pos, 1)
 	}
 	for _, e := range g.enemies {
-		turn := math.Atan2(g.pos.X-e.pos.X, g.pos.Y-e.pos.Y) // machines face the player
-		if e.hurt > 0 {
-			put(c, cam, e.model, e.pos, turn, glow)
-		} else {
-			put(c, cam, e.model, e.pos, turn, lit...)
+		bright := 1.0
+		if e.hurt <= 0 {
+			bright = brightness(lit, cam.Position, e.pos)
 		}
+		stand(c, cam, e.look, e.pos, bright)
 	}
 
 	c.Set(c.Width()/2, c.Height()/2, engine.RGB(120, 255, 160)) // the crosshair

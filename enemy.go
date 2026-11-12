@@ -4,7 +4,6 @@ import (
 	"slices"
 
 	"glonk.dev/geometry"
-	"glonk.dev/mesh"
 )
 
 const (
@@ -15,7 +14,7 @@ const (
 
 // kind is what the machines of one sort have in common.
 type kind struct {
-	model  mesh.Mesh
+	look
 	health int
 	speed  float64 // tiles a second
 	radius float64
@@ -27,8 +26,8 @@ type kind struct {
 
 // kinds are the machines, by the rune that puts one on a map.
 var kinds = map[rune]kind{
-	'c': {model: crawlerModel, health: 2, speed: 2.2, radius: 0.3, reach: 0.85, every: 0.8, damage: 10},
-	's': {model: sentryModel, health: 3, speed: 1.2, radius: 0.22, reach: 7, every: 1.6, ranged: true},
+	'c': {look: look{pic: art("crawler"), height: 0.7}, health: 2, speed: 2.2, radius: 0.3, reach: 0.85, every: 0.8, damage: 10},
+	's': {look: look{pic: art("sentry"), height: 0.95}, health: 3, speed: 1.2, radius: 0.22, reach: 7, every: 1.6, ranged: true},
 }
 
 type enemy struct {

@@ -2,6 +2,7 @@ package main
 
 import (
 	"math"
+	"slices"
 	"strings"
 	"testing"
 
@@ -61,7 +62,7 @@ func TestEveryLevelIsWellFormed(t *testing.T) {
 		}
 		for _, s := range l.spawns {
 			_, machine := kinds[s.kind]
-			_, thing := pickupModels[s.kind]
+			_, thing := pickupLooks[s.kind]
 			if !machine && !thing {
 				t.Errorf("level %d: nothing is spawned by %q", n, s.kind)
 			}
@@ -97,6 +98,65 @@ func TestTheViewHasNoHoles(t *testing.T) {
 			}
 		}
 	}
+}
+
+// A picture needs a hole, or it is a box, and a pixel to draw, or it is nothing.
+func TestEveryPictureLoads(t *testing.T) {
+	files, err := assets.ReadDir("assets")
+	if err != nil || len(files) == 0 {
+		t.Fatalf("reading assets: %d files, error %v", len(files), err)
+	}
+	for _, f := range files {
+		pic := art(strings.TrimSuffix(f.Name(), ".png"))
+		holes, solid := 0, 0
+		for y := range pic.Height() {
+			for x := range pic.Width() {
+				if pic.At(x, y) == (engine.Color{}) {
+					holes++
+				} else {
+					solid++
+				}
+			}
+		}
+		if holes == 0 || solid == 0 {
+			t.Errorf("%s: %d see-through pixels and %d solid ones, wanted some of each", f.Name(), holes, solid)
+		}
+	}
+}
+
+// pixels returns a copy of what is on a canvas.
+func pixels(c *engine.Canvas) []engine.Color {
+	var all []engine.Color
+	for y := range c.Height() {
+		for x := range c.Width() {
+			all = append(all, c.At(x, y))
+		}
+	}
+	return all
+}
+
+// A thing takes the depth the walls are drawn with, so one behind a wall changes nothing on
+// the canvas and one in front of it does.
+func TestWallsHideThings(t *testing.T) {
+	l := parse(corridor)
+	fb, _ := engine.NewFrameBuffer(96, 32)
+	c := fb.Canvas()
+	cam := mesh.Camera{Position: geometry.Vector3{X: 2.5, Y: eyeHeight, Z: 1.5}, FOV: fov}
+	l.mesh.DrawShadedPixels(c, cam, mesh.Ambient{Level: 1})
+	walls := pixels(c)
+
+	crawler := kinds['c'].look
+	stand(c, cam, crawler, geometry.Vector2{X: 2.5, Y: 4.5}, 1)
+	if !slices.Equal(pixels(c), walls) {
+		t.Error("a crawler behind the wall is drawn")
+	}
+	stand(c, cam, crawler, geometry.Vector2{X: 2.5, Y: 2.5}, 1)
+	if slices.Equal(pixels(c), walls) {
+		t.Error("a crawler in front of the wall is not drawn")
+	}
+	stand(c, cam, crawler, geometry.Vector2{X: 2.5, Y: 0.5}, 1)
+	stand(c, cam, crawler, geometry.Vector2{X: 2.5, Y: 1.5}, 1)
+	// Neither a thing behind the camera nor one on top of it may panic or hang.
 }
 
 func TestWallsStopThePlayerAndLetThemSlide(t *testing.T) {

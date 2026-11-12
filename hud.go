@@ -20,51 +20,15 @@ var help = []string{
 	"Space fire   Esc pause",
 }
 
-// weaponArt is the weapon as the player holds it, seen from behind, a pixel for each rune.
-var weaponArt = []string{
-	"     ####     ",
-	"     #oo#     ",
-	"     #oo#     ",
-	"    ##oo##    ",
-	"    #====#    ",
-	"   ##====##   ",
-	"   #======#   ",
-	"  ##======##  ",
-	"  #========#  ",
-}
-
-var weaponColors = map[rune]engine.Color{
-	'#': engine.RGB(52, 56, 66),
-	'=': engine.RGB(112, 118, 132),
-	'o': engine.RGB(226, 120, 40),
-}
-
 // drawWeapon draws the weapon at the bottom middle of the view, larger in a larger window.
-// While it fires, its coil is white and it kicks down.
+// While it fires it shows its firing picture, and kicks down.
 func (g *game) drawWeapon(c *engine.Canvas) {
-	size := max(1, c.Width()/70)
-	x0 := (c.Width() - len(weaponArt[0])*size) / 2
-	y0 := c.Height() - len(weaponArt)*size
-	firing := g.flash > 0
-	if firing {
-		y0 += size
+	pic, size, kick := weaponIdle, max(1, c.Width()/70), 0
+	if g.flash > 0 {
+		pic, kick = weaponFiring, size
 	}
-	for y, row := range weaponArt {
-		for x, r := range row {
-			color, ok := weaponColors[r]
-			if !ok {
-				continue
-			}
-			if firing && r == 'o' {
-				color = engine.RGB(255, 250, 220)
-			}
-			for dy := range size {
-				for dx := range size {
-					c.Set(x0+x*size+dx, y0+y*size+dy, color)
-				}
-			}
-		}
-	}
+	w, h := pic.Width()*size, pic.Height()*size
+	pic.DrawScaled(c, (c.Width()-w)/2, c.Height()-h+kick, w, h)
 }
 
 // drawHUD draws the panel at the bottom left: health as a number and a bar, and the ammo.
