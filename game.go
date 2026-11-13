@@ -73,7 +73,7 @@ func (g *game) show(s screen) {
 func (g *game) restart(n int) {
 	g.health, g.ammo = maxHealth, startAmmo
 	g.level = n
-	g.enter(parse(levels[n]))
+	g.enter(parse(levels[n], zones[0]))
 }
 
 // enter puts the player at the start of a map, with its machines and pickups. Health and
@@ -114,7 +114,7 @@ func (g *game) Update(dt float64, in *engine.Input) error {
 			g.show(won)
 		} else {
 			g.level++
-			g.enter(parse(levels[g.level]))
+			g.enter(parse(levels[g.level], zones[0]))
 		}
 	}
 	return nil
@@ -158,7 +158,7 @@ func (g *game) drawWorld(fb *engine.FrameBuffer) {
 
 	// The exit, the pickups and the bolts give light of their own, so they are drawn as
 	// bright as they are. A machine is lit as the walls are, but for the flash of a hit.
-	g.lvl.mesh.DrawShadedPixels(c, cam, lit...)
+	g.lvl.draw(c, cam, lit...)
 	pulse := int(g.clock*3) % 2
 	stand(c, cam, exitLook, pulse, g.lvl.exit, 1)
 	for _, p := range g.pickups {

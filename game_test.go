@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"math"
 	"slices"
 	"strings"
@@ -27,7 +28,7 @@ const corridor = `
 // play returns a game in the middle of the given map, as if Start had been chosen.
 func play(text string) *game {
 	g := &game{screen: playing, health: maxHealth, ammo: startAmmo}
-	g.enter(parse(text))
+	g.enter(parse(text, zones[0]))
 	return g
 }
 
@@ -56,9 +57,11 @@ func TestEveryLevelIsWellFormed(t *testing.T) {
 			t.Errorf("level %d: %d starts and %d exits, wanted one of each", n, starts, exits)
 		}
 
-		l := parse(text)
-		if err := l.mesh.Validate(); err != nil {
-			t.Errorf("level %d: %v", n, err)
+		l := parse(text, zones[0])
+		for _, c := range l.chunks {
+			if err := errors.Join(c.fine.Validate(), c.coarse.Validate()); err != nil {
+				t.Errorf("level %d: %v", n, err)
+			}
 		}
 		for _, s := range l.spawns {
 			_, machine := kinds[s.kind]
@@ -74,7 +77,7 @@ func TestEveryLevelIsWellFormed(t *testing.T) {
 // wound the wrong way round, or a gap between two faces.
 func TestTheViewHasNoHoles(t *testing.T) {
 	for n, text := range levels {
-		l := parse(text)
+		l := parse(text, zones[0])
 		fb, _ := engine.NewFrameBuffer(96, 32)
 		for turn := range 8 {
 			fb.Clear()
@@ -84,7 +87,7 @@ func TestTheViewHasNoHoles(t *testing.T) {
 				Yaw:      float64(turn) * math.Pi / 4,
 				FOV:      fov,
 			}
-			l.mesh.DrawShadedPixels(c, cam, mesh.Ambient{Level: 1})
+			l.draw(c, cam, mesh.Ambient{Level: 1})
 			holes := 0
 			for y := range c.Height() {
 				for x := range c.Width() {
@@ -118,7 +121,13 @@ func TestEveryPictureLoads(t *testing.T) {
 				}
 			}
 		}
-		if holes == 0 || solid == 0 {
+		// A wall, a floor or a ceiling is the other way about: a hole in one is a hole in
+		// the world.
+		surface := strings.HasPrefix(f.Name(), "wall-") || strings.HasPrefix(f.Name(), "floor-") || strings.HasPrefix(f.Name(), "ceiling-")
+		switch {
+		case surface && holes > 0:
+			t.Errorf("%s: %d see-through pixels in a surface, wanted none", f.Name(), holes)
+		case !surface && (holes == 0 || solid == 0):
 			t.Errorf("%s: %d see-through pixels and %d solid ones, wanted some of each", f.Name(), holes, solid)
 		}
 	}
@@ -138,11 +147,11 @@ func pixels(c *engine.Canvas) []engine.Color {
 // A thing takes the depth the walls are drawn with, so one behind a wall changes nothing on
 // the canvas and one in front of it does.
 func TestWallsHideThings(t *testing.T) {
-	l := parse(corridor)
+	l := parse(corridor, zones[0])
 	fb, _ := engine.NewFrameBuffer(96, 32)
 	c := fb.Canvas()
 	cam := mesh.Camera{Position: geometry.Vector3{X: 2.5, Y: eyeHeight, Z: 1.5}, FOV: fov}
-	l.mesh.DrawShadedPixels(c, cam, mesh.Ambient{Level: 1})
+	l.draw(c, cam, mesh.Ambient{Level: 1})
 	walls := pixels(c)
 
 	crawler := kinds['c'].look

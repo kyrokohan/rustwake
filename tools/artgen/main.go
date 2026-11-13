@@ -38,6 +38,23 @@ var sheets = []sheet{
 	{name: "barrel", frames: 1, draw: barrel},
 	{name: "crate", frames: 1, draw: crate},
 	{name: "lamp", frames: 1, draw: lamp},
+
+	{name: "wall-1a", frames: 1, draw: wall1a},
+	{name: "wall-1b", frames: 1, draw: wall1b},
+	{name: "wall-1c", frames: 1, draw: wall1c},
+	{name: "floor-1", frames: 1, draw: floor1},
+	{name: "ceiling-1", frames: 1, draw: ceiling1},
+	{name: "wall-2a", frames: 1, draw: wall2a},
+	{name: "wall-2b", frames: 1, draw: wall2b},
+	{name: "wall-2c", frames: 1, draw: wall2c},
+	{name: "floor-2", frames: 1, draw: floor2},
+	{name: "ceiling-2", frames: 1, draw: ceiling2},
+	{name: "wall-3a", frames: 1, draw: wall3a},
+	{name: "wall-3b", frames: 1, draw: wall3b},
+	{name: "wall-3c", frames: 1, draw: wall3c},
+	{name: "floor-3", frames: 1, draw: floor3},
+	{name: "ceiling-3", frames: 1, draw: ceiling3},
+	{name: "floor-exit", frames: 1, draw: floorExit},
 }
 
 func main() {
@@ -45,10 +62,24 @@ func main() {
 	preview := flag.String("preview", "", "a folder for enlarged copies, to look at")
 	flag.Parse()
 
+	var surfaces []*pic // the walls, floors and ceilings, for one sheet to look at
+	defer func() {
+		if *preview != "" {
+			save(filepath.Join(*preview, "_surfaces.png"), enlarge(surfaces, 6, 8))
+		}
+	}()
+
 	for _, s := range sheets {
 		frames := make([]*pic, s.frames)
 		for i := range frames {
 			frames[i] = s.draw(i)
+		}
+		if frames[0].w == frames[0].h && frames[0].w <= 16 && s.frames == 1 && s.name != "lamp" {
+			big := tiled(frames[0])
+			if big.w < 32 {
+				big = tiled(big)
+			}
+			surfaces = append(surfaces, big)
 		}
 		var err error
 		if s.apart {
