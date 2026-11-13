@@ -1,6 +1,7 @@
 package main
 
 import (
+	"embed"
 	"math"
 	"slices"
 	"strings"
@@ -12,32 +13,39 @@ import (
 	"glonk.dev/tilemap"
 )
 
-// levels are the maps, in the order they are played. # % and & are the three walls of the
-// map's zone, @ is where the player starts, facing the top of the text, and E is the exit.
-// c is a crawler, s a sentry, h health and a ammo. Every row of a map is the same width,
-// with a wall all round.
-var levels = []string{`
-########################
-#.....#......c...#....E#
-#.....#..........#.....#
-#.....&...%%.....&..s..#
-#..a.........%%........#
-#.....&..........&.....#
-#@....#..c....h..#..a..#
-########################
-`, `
-############################
-#E..%....s.....#.....c....h#
-#...%..........#...........#
-#...%...&&&&...#...%%%%....#
-#..............&...%%%%....#
-#s......&..&.......%%%%..c.#
-#...%...&a.&...&...%%%%....#
-#...%...&&&&...#...........#
-#...%..........#....a......#
-#h..%....c...a.#.........@.#
-############################
-`}
+// levelFiles are the maps, one to a file, played in the order of their names. In a map # %
+// and & are the three walls of its zone, @ is where the player starts, facing the top of
+// the text, and E is the exit. c s d H and B are the machines, h is health and a ammo, o is
+// a barrel and x a crate, which are in the way, and l is a lamp. Every row of a map is the
+// same width, with a wall all round.
+//
+//go:embed levels/*.txt
+var levelFiles embed.FS
+
+// levelFile is a map as it is written: its name, which is its file's, and its text.
+type levelFile struct{ name, text string }
+
+// levels are the maps, in the order they are played.
+var levels = func() []levelFile {
+	files, err := levelFiles.ReadDir("levels")
+	if err != nil {
+		panic(err)
+	}
+	var all []levelFile
+	for _, f := range files {
+		text, err := levelFiles.ReadFile("levels/" + f.Name())
+		if err != nil {
+			panic(err)
+		}
+		// "05-slag-run.txt" is the map called "slag run".
+		name := strings.ReplaceAll(strings.TrimSuffix(f.Name(), ".txt")[3:], "-", " ")
+		all = append(all, levelFile{name, string(text)})
+	}
+	return all
+}()
+
+// zoneOf is the look of map n: the maps go through the zones in equal shares.
+func zoneOf(n int) zone { return zones[n*len(zones)/len(levels)] }
 
 const (
 	wallHeight = 1.0
@@ -70,8 +78,9 @@ func newZone(n string) zone {
 	}
 }
 
-// walls are the tiles that stop a mover. They are never drawn as cells, so they have none.
-var walls = map[rune]tilemap.Tile{'#': {Solid: true}, '%': {Solid: true}, '&': {Solid: true}}
+// solids are the tiles that stop a mover: the three walls, and the barrels and crates
+// that stand in the way. They are never drawn as cells, so they have none.
+var solids = map[rune]tilemap.Tile{'#': {Solid: true}, '%': {Solid: true}, '&': {Solid: true}, 'o': {Solid: true}, 'x': {Solid: true}}
 
 // sides are the four neighbors of a tile: the step to each, and the two ends of the edge
 // the tile shares with it, as offsets from the tile's corner.
@@ -109,7 +118,9 @@ type level struct {
 	across int // chunks in a row of them
 	start  geometry.Vector2
 	exit   geometry.Vector2
-	spawns []spawn
+	spawns []spawn            // the machines and the pickups
+	props  []spawn            // the barrels, the crates and the lamps
+	lamps  []geometry.Vector2 // where the lamps hang, to light the plant from
 }
 
 // parse reads a map, in the look of a zone. The rows are turned over first, so that the
@@ -119,7 +130,7 @@ type level struct {
 func parse(text string, z zone) *level {
 	rows := strings.Split(strings.Trim(text, "\n"), "\n")
 	slices.Reverse(rows)
-	l := &level{grid: tilemap.FromLines(walls, rows...)}
+	l := &level{grid: tilemap.FromLines(solids, rows...)}
 	l.across = (l.grid.Width() + chunkSize - 1) / chunkSize
 	l.chunks = make([]chunk, l.across*((l.grid.Height()+chunkSize-1)/chunkSize))
 	for i := range l.chunks {
@@ -131,7 +142,7 @@ func parse(text string, z zone) *level {
 
 	for y, row := range rows {
 		for x, r := range row {
-			if _, wall := walls[r]; wall {
+			if _, wall := z.walls[r]; wall {
 				continue
 			}
 			fx, fy := float64(x), float64(y)
@@ -144,6 +155,11 @@ func parse(text string, z zone) *level {
 			case 'E':
 				l.exit = mid
 				floor, ceiling = exitPad, exitPad
+			case 'l':
+				l.lamps = append(l.lamps, mid)
+				fallthrough
+			case 'o', 'x':
+				l.props = append(l.props, spawn{r, mid})
 			default:
 				l.spawns = append(l.spawns, spawn{r, mid})
 			}
@@ -153,12 +169,13 @@ func parse(text string, z zone) *level {
 			c.face(geometry.Vector3{X: fx, Y: wallHeight, Z: fy}, geometry.Vector3{X: 1}, geometry.Vector3{Z: 1}, geometry.Vector3{Y: -1}, ceiling)
 			for _, s := range sides {
 				nx, ny := x+s.dx, y+s.dy
-				if !l.grid.Solid(nx, ny) {
-					continue
-				}
-				wall := z.walls['#'] // what the edge of the world is made of
+				beside := '#' // what the edge of the world is made of
 				if ny >= 0 && ny < len(rows) && nx >= 0 && nx < len(rows[ny]) {
-					wall = z.walls[rune(rows[ny][nx])]
+					beside = rune(rows[ny][nx])
+				}
+				wall, ok := z.walls[beside]
+				if !ok {
+					continue
 				}
 				c.face(
 					geometry.Vector3{X: fx + s.ax, Y: wallHeight, Z: fy + s.ay},

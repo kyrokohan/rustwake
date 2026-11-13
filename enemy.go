@@ -7,12 +7,13 @@ import (
 )
 
 const (
-	boltSpeed  = 5.0 // tiles a second
-	boltDamage = 15
-	boltReach  = 0.35 // how near the player a bolt must pass to hit
-	strikeTime = 0.15 // seconds a machine shows its strike after it attacks
-	windUpTime = 0.25 // seconds before an attack that it shows the wind-up
-	dieTime    = 0.5  // seconds a machine takes to fall apart
+	boltSpeed    = 5.0 // tiles a second
+	boltDamage   = 15
+	boltReach    = 0.35 // how near the player a bolt must pass to hit
+	volleySpread = 0.3  // radians between the bolts of a volley
+	strikeTime   = 0.15 // seconds a machine shows its strike after it attacks
+	windUpTime   = 0.25 // seconds before an attack that it shows the wind-up
+	dieTime      = 0.5  // seconds a machine takes to fall apart
 )
 
 // The frames of a machine's strip: four of a walk, two of an attack, four of its end.
@@ -33,14 +34,18 @@ type kind struct {
 	radius float64
 	reach  float64 // how near the player must be for it to attack
 	every  float64 // seconds between attacks
-	damage int     // of a melee hit; a ranged kind fires a bolt instead
+	damage int     // of a melee hit; a ranged kind fires bolts instead
 	ranged bool
+	volley int // how many bolts a ranged kind fires at once, spread out; 0 is one
 }
 
 // kinds are the machines, by the rune that puts one on a map.
 var kinds = map[rune]kind{
 	'c': {look: strip("crawler", allFrames, 0.7, 0), health: 2, speed: 2.2, radius: 0.3, reach: 0.85, every: 0.8, damage: 10},
 	's': {look: strip("sentry", allFrames, 0.95, 0), health: 3, speed: 1.2, radius: 0.22, reach: 7, every: 1.6, ranged: true},
+	'd': {look: strip("drone", allFrames, 0.42, 0.3), health: 1, speed: 3.4, radius: 0.2, reach: 0.6, every: 0.5, damage: 5},
+	'H': {look: strip("hauler", allFrames, 0.98, 0), health: 8, speed: 1.0, radius: 0.38, reach: 1.0, every: 1.3, damage: 25},
+	'B': {look: strip("overseer", allFrames, 0.98, 0), health: 40, speed: 0.7, radius: 0.45, reach: 9, every: 1.4, ranged: true, volley: 3},
 }
 
 type enemy struct {
@@ -113,7 +118,11 @@ func (g *game) updateEnemies(dt float64) {
 			if e.wait <= 0 {
 				e.wait = e.every
 				if e.ranged {
-					g.bolts = append(g.bolts, bolt{e.pos, to.Normalize().Scale(boltSpeed)})
+					n := max(1, e.volley)
+					for i := range n {
+						aim := to.Normalize().Rotate(volleySpread * (float64(i) - float64(n-1)/2))
+						g.bolts = append(g.bolts, bolt{e.pos, aim.Scale(boltSpeed)})
+					}
 				} else {
 					g.damage(e.damage)
 				}

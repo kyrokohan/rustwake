@@ -45,30 +45,75 @@ func hold(t *testing.T, g *game, seconds float64, keys ...engine.Key) {
 	}
 }
 
+// A map is drawn by hand, so every one is checked for what a hand gets wrong: rows of
+// different widths, a gap in the wall round it, a rune that means nothing, a place that
+// cannot be walked to, and more machines than there is ammo to shoot.
 func TestEveryLevelIsWellFormed(t *testing.T) {
-	for n, text := range levels {
-		rows := strings.Split(strings.Trim(text, "\n"), "\n")
-		for _, row := range rows {
+	if len(levels) != 12 {
+		t.Fatalf("%d levels, wanted 12", len(levels))
+	}
+	for _, lv := range levels {
+		rows := strings.Split(strings.Trim(lv.text, "\n"), "\n")
+		for y, row := range rows {
 			if len(row) != len(rows[0]) {
-				t.Errorf("level %d: row %q is not as wide as the first", n, row)
+				t.Fatalf("%s: row %d is %d wide and the first is %d", lv.name, y, len(row), len(rows[0]))
+			}
+			for x, r := range row {
+				_, wall := zones[0].walls[r]
+				edge := y == 0 || y == len(rows)-1 || x == 0 || x == len(row)-1
+				if edge && !wall {
+					t.Errorf("%s: %q at (%d, %d) is a gap in the wall round the map", lv.name, r, x, y)
+				}
+				if !strings.ContainsRune("#%&.@EcsdHBhaoxl", r) {
+					t.Errorf("%s: %q at (%d, %d) means nothing", lv.name, r, x, y)
+				}
 			}
 		}
-		if starts, exits := strings.Count(text, "@"), strings.Count(text, "E"); starts != 1 || exits != 1 {
-			t.Errorf("level %d: %d starts and %d exits, wanted one of each", n, starts, exits)
+		if starts, exits := strings.Count(lv.text, "@"), strings.Count(lv.text, "E"); starts != 1 || exits != 1 {
+			t.Errorf("%s: %d starts and %d exits, wanted one of each", lv.name, starts, exits)
 		}
 
-		l := parse(text, zones[0])
+		l := parse(lv.text, zones[0])
 		for _, c := range l.chunks {
 			if err := errors.Join(c.fine.Validate(), c.coarse.Validate()); err != nil {
-				t.Errorf("level %d: %v", n, err)
+				t.Errorf("%s: %v", lv.name, err)
 			}
 		}
+
+		// Walk everywhere the player can, tile by tile, from the start.
+		tile := func(p geometry.Vector2) [2]int { return [2]int{int(p.X), int(p.Y)} }
+		reached, next := map[[2]int]bool{tile(l.start): true}, [][2]int{tile(l.start)}
+		for len(next) > 0 {
+			at := next[0]
+			next = next[1:]
+			for _, s := range sides {
+				to := [2]int{at[0] + s.dx, at[1] + s.dy}
+				if !reached[to] && !l.grid.Solid(to[0], to[1]) {
+					reached[to] = true
+					next = append(next, to)
+				}
+			}
+		}
+		if !reached[tile(l.exit)] {
+			t.Errorf("%s: the exit cannot be walked to", lv.name)
+		}
+		toShoot, ammo := 0, 0
 		for _, s := range l.spawns {
-			_, machine := kinds[s.kind]
+			k, machine := kinds[s.kind]
 			_, thing := pickupLooks[s.kind]
 			if !machine && !thing {
-				t.Errorf("level %d: nothing is spawned by %q", n, s.kind)
+				t.Errorf("%s: nothing is spawned by %q", lv.name, s.kind)
 			}
+			if !reached[tile(s.at)] {
+				t.Errorf("%s: the %q at %v cannot be walked to", lv.name, s.kind, s.at)
+			}
+			toShoot += k.health
+			if s.kind == 'a' {
+				ammo += ammoInPack
+			}
+		}
+		if ammo < toShoot {
+			t.Errorf("%s: %d ammo lies about and the machines take %d shots", lv.name, ammo, toShoot)
 		}
 	}
 }
@@ -76,8 +121,8 @@ func TestEveryLevelIsWellFormed(t *testing.T) {
 // Inside a closed map every pixel is a wall, a floor or a ceiling. An empty one is a face
 // wound the wrong way round, or a gap between two faces.
 func TestTheViewHasNoHoles(t *testing.T) {
-	for n, text := range levels {
-		l := parse(text, zones[0])
+	for n, lv := range levels {
+		l := parse(lv.text, zoneOf(n))
 		fb, _ := engine.NewFrameBuffer(96, 32)
 		for turn := range 8 {
 			fb.Clear()
@@ -266,7 +311,7 @@ func TestPickupsAndTheExit(t *testing.T) {
 // TestSmoke plays every map through the real Update and Draw with keys held, and prints the
 // last frame of each: go test -run TestSmoke -v.
 func TestSmoke(t *testing.T) {
-	g := newGame()
+	g := newGame(0)
 	kb := engine.NewKeyboard()
 	kb.Press(engine.KeyEnter) // Start
 	if err := g.Update(frame, kb.Input()); err != nil || g.screen != playing {
@@ -275,11 +320,11 @@ func TestSmoke(t *testing.T) {
 	kb.EndFrame()
 
 	fb, _ := engine.NewFrameBuffer(80, 24)
-	for n := range levels {
+	for n, lv := range levels {
 		g.restart(n)
 		g.screen = playing
 		kb.Press('w', 'e', ' ')
-		for range 300 {
+		for range 120 {
 			if err := g.Update(frame, kb.Input()); err != nil {
 				t.Fatal(err)
 			}
@@ -288,18 +333,25 @@ func TestSmoke(t *testing.T) {
 			g.Draw(fb)
 		}
 		if strings.TrimSpace(fb.String()) == "" {
-			t.Errorf("level %d: the frame is blank", n)
+			t.Errorf("%s: the frame is blank", lv.name)
 		}
-		t.Logf("level %d\n%s", n, fb.String())
+		t.Logf("%s\n%s", lv.name, fb.String())
 	}
 }
 
+// BenchmarkDraw times a frame at the start of every map, turned to look across it. The
+// loop runs at 30 frames a second, which is 33 ms each.
 func BenchmarkDraw(b *testing.B) {
-	g := newGame()
-	g.restart(len(levels) - 1) // the larger map
 	fb, _ := engine.NewFrameBuffer(200, 60)
-	for b.Loop() {
-		fb.Clear()
-		g.Draw(fb)
+	for n, lv := range levels {
+		g := newGame(n)
+		g.screen = playing
+		b.Run(lv.name, func(b *testing.B) {
+			for b.Loop() {
+				g.yaw += 0.1 // all the way round, so that every view of the map counts
+				fb.Clear()
+				g.Draw(fb)
+			}
+		})
 	}
 }

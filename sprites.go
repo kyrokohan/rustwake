@@ -34,6 +34,11 @@ var (
 		'h': strip("health", 2, 0.3, 0),
 		'a': strip("ammo", 2, 0.3, 0),
 	}
+	propLooks = map[rune]look{
+		'o': strip("barrel", 1, 0.7, 0),
+		'x': strip("crate", 1, 0.78, 0),
+		'l': strip("lamp", 1, 0.2, wallHeight-0.2),
+	}
 	// The weapon at rest, and the three frames of a shot.
 	weaponFrames = [4]*bitmap.Bitmap{art("weapon-0"), art("weapon-1"), art("weapon-2"), art("weapon-3")}
 )

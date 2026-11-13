@@ -47,7 +47,7 @@ func (g *game) drawHUD(fb *engine.FrameBuffer) {
 		fb.DrawBox(0, 0, fb.Width(), fb.Height(), style.Foreground)
 	}
 	y := fb.Height() - 3
-	widget.Panel{Title: fmt.Sprintf("level %d/%d", g.level+1, len(levels)), Style: style, Fill: hudFill}.Draw(fb, 0, y, 34, 3)
+	widget.Panel{Title: fmt.Sprintf("%d/%d %s", g.level+1, len(levels), levels[g.level].name), Style: style, Fill: hudFill}.Draw(fb, 0, y, 34, 3)
 	widget.Label{Text: fmt.Sprintf("HP %3d", g.health), Style: hudStyle}.Draw(fb, 2, y+1, 6)
 	widget.Bar{
 		Value: float64(g.health) / maxHealth,

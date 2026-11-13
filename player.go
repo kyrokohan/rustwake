@@ -13,6 +13,7 @@ import (
 const (
 	maxHealth  = 100
 	startAmmo  = 20
+	ammoInPack = 10
 	walkSpeed  = 3.5  // tiles a second
 	turnSpeed  = 2.4  // radians a second
 	bodyRadius = 0.25 // farther than the corners of the near plane, so the camera never looks through a wall
@@ -121,7 +122,7 @@ func (g *game) collect() {
 			}
 			g.health = min(maxHealth, g.health+25)
 		case 'a':
-			g.ammo += 10
+			g.ammo += ammoInPack
 		}
 		return true
 	})

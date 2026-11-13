@@ -1,6 +1,10 @@
 package main
 
 import (
+	"cmp"
+	"math"
+	"slices"
+
 	"glonk.dev/engine"
 	"glonk.dev/geometry"
 	"glonk.dev/mesh"
@@ -55,10 +59,10 @@ type game struct {
 	walked float64 // tiles walked, which the weapon bobs to
 }
 
-// newGame returns the game main runs: the first map, behind the title menu.
-func newGame() *game {
+// newGame returns the game main runs: map n, behind the title menu.
+func newGame(n int) *game {
 	g := &game{}
-	g.restart(0)
+	g.restart(n)
 	g.show(title)
 	return g
 }
@@ -72,8 +76,13 @@ func (g *game) show(s screen) {
 // restart begins map n with full health and the starting ammo.
 func (g *game) restart(n int) {
 	g.health, g.ammo = maxHealth, startAmmo
+	g.load(n)
+}
+
+// load begins map n as the player is.
+func (g *game) load(n int) {
 	g.level = n
-	g.enter(parse(levels[n], zones[0]))
+	g.enter(parse(levels[n].text, zoneOf(n)))
 }
 
 // enter puts the player at the start of a map, with its machines and pickups. Health and
@@ -113,8 +122,7 @@ func (g *game) Update(dt float64, in *engine.Input) error {
 		if g.level+1 == len(levels) {
 			g.show(won)
 		} else {
-			g.level++
-			g.enter(parse(levels[g.level], zones[0]))
+			g.load(g.level + 1)
 		}
 	}
 	return nil
@@ -156,9 +164,24 @@ func (g *game) drawWorld(fb *engine.FrameBuffer) {
 		lit = append(lit, mesh.Point{Position: cam.Position, Range: 4 * lampRange})
 	}
 
-	// The exit, the pickups and the bolts give light of their own, so they are drawn as
-	// bright as they are. A machine is lit as the walls are, but for the flash of a hit.
+	// The three nearest lamps light the plant too. Every light is asked about every pixel,
+	// so more of them would cost more than they show.
+	slices.SortFunc(g.lvl.lamps, func(a, b geometry.Vector2) int { return cmp.Compare(a.Distance(g.pos), b.Distance(g.pos)) })
+	for _, at := range g.lvl.lamps[:min(3, len(g.lvl.lamps))] {
+		lit = append(lit, mesh.Point{Position: geometry.Vector3{X: at.X, Y: wallHeight - 0.25, Z: at.Y}, Intensity: 0.85, Range: 6})
+	}
+
+	// The exit, the pickups, the bolts and the lamps give light of their own, so they are
+	// drawn as bright as they are. The rest is lit as the walls are, but for a machine in
+	// the flash of a hit.
 	g.lvl.draw(c, cam, lit...)
+	for _, p := range g.lvl.props {
+		bright := 1.0
+		if p.kind != 'l' {
+			bright = brightness(lit, cam.Position, p.at)
+		}
+		stand(c, cam, propLooks[p.kind], 0, p.at, bright)
+	}
 	pulse := int(g.clock*3) % 2
 	stand(c, cam, exitLook, pulse, g.lvl.exit, 1)
 	for _, p := range g.pickups {
@@ -176,7 +199,11 @@ func (g *game) drawWorld(fb *engine.FrameBuffer) {
 		if e.hurt <= 0 {
 			bright = brightness(lit, cam.Position, e.pos)
 		}
-		stand(c, cam, e.look, e.frame(g.clock), e.pos, bright)
+		l := e.look
+		if l.lift > 0 { // what flies bobs
+			l.lift += 0.05 * math.Sin(g.clock*5+e.pos.X*3)
+		}
+		stand(c, cam, l, e.frame(g.clock), e.pos, bright)
 	}
 
 	c.Set(c.Width()/2, c.Height()/2, engine.RGB(120, 255, 160)) // the crosshair

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"image"
 	"image/color"
 	"image/png"
@@ -18,39 +19,35 @@ import (
 //
 //	RUSTWAKE_SNAP=/some/folder go test -run TestSnapshot .
 //
-// A pixel of the canvas is a square, and any other character is a mark in its own color.
+// There is the title, the start of a map in each zone, and each kind of machine seen from
+// two tiles away. A pixel of the canvas is a square, and any other character is a mark.
 func TestSnapshot(t *testing.T) {
 	dir := os.Getenv("RUSTWAKE_SNAP")
 	if dir == "" {
 		t.Skip("RUSTWAKE_SNAP is not set")
 	}
-	shots := map[string]func(g *game){
-		"1-title": func(g *game) {},
-		"2-doorway": func(g *game) {
-			g.pos, g.yaw = geometry.Vector2{X: 5.5, Y: 3.5}, math.Pi/2
-		},
-		"3-crawler": func(g *game) {
-			g.pos, g.yaw = geometry.Vector2{X: 9.5, Y: 3.6}, math.Pi
-		},
-		"4-sentry-fire": func(g *game) {
-			g.pos, g.yaw = geometry.Vector2{X: 18.5, Y: 2.5}, math.Pi/4
-			g.flash, g.pain, g.cool = 0.05, 0.1, fireEvery-0.01
-			g.bolts = append(g.bolts, bolt{pos: geometry.Vector2{X: 19.6, Y: 3.6}})
-		},
-		"5-pickups-exit": func(g *game) {
-			g.pos, g.yaw = geometry.Vector2{X: 18.5, Y: 1.5}, 0.35
-		},
-		"6-level2": func(g *game) {
-			g.restart(1)
-			g.yaw = -0.5
-		},
+
+	shots := map[string]*game{"title": newGame(0)}
+	for _, n := range []int{0, 5, 9, 11} {
+		g := newGame(n)
+		g.screen = playing
+		shots[fmt.Sprintf("start-%02d", n+1)] = g
 	}
-	for name, set := range shots {
-		g := newGame()
-		if name != "1-title" {
+	for kind := range kinds {
+		// The first map that has the machine, with the player put in front of it.
+		for n := range levels {
+			g := newGame(n)
 			g.screen = playing
+			if faced(g, kind) {
+				shots["machine-"+string(kind)] = g
+				g.cool = fireEvery - 0.01 // in the middle of a shot, for the flash
+				g.flash = flashTime
+				break
+			}
 		}
-		set(g)
+	}
+
+	for name, g := range shots {
 		fb, _ := engine.NewFrameBuffer(160, 48)
 		g.Draw(fb)
 
@@ -92,4 +89,23 @@ func TestSnapshot(t *testing.T) {
 		}
 		f.Close()
 	}
+}
+
+// faced puts the player two tiles from the first machine of a kind on the map, looking at
+// it, and reports whether there was one with room in front of it.
+func faced(g *game, kind rune) bool {
+	for _, e := range g.enemies {
+		if e.look != kinds[kind].look {
+			continue
+		}
+		for turn := range 4 {
+			yaw := float64(turn) * math.Pi / 2
+			from := e.pos.Sub(geometry.Vector2{X: math.Sin(yaw), Y: math.Cos(yaw)}.Scale(2.2))
+			if !g.lvl.solid(from) && g.lvl.sees(from, e.pos) {
+				g.pos, g.yaw, e.awake = from, yaw, true
+				return true
+			}
+		}
+	}
+	return false
 }
