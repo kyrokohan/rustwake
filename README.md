@@ -13,6 +13,12 @@ rustwake
 
 Start on a later level with `rustwake -level 7`. There are 12.
 
+If your shell says `rustwake: command not found`, Go's install folder is not on your PATH. Add it (`go env GOPATH` shows where it is, usually `~/go`):
+
+```
+export PATH="$PATH:$(go env GOPATH)/bin"
+```
+
 You need:
 
 - Go 1.27.2 or newer, to install it
