@@ -1,4 +1,4 @@
-module rustwake
+module github.com/kyrokohan/rustwake
 
 go 1.27.2
 
