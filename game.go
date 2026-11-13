@@ -208,5 +208,9 @@ func (g *game) drawWorld(fb *engine.FrameBuffer) {
 
 	c.Set(c.Width()/2, c.Height()/2, engine.RGB(120, 255, 160)) // the crosshair
 	g.drawWeapon(c)
+	g.drawStatus(c)
+	if g.screen == title {
+		drawLogo(c)
+	}
 	c.Compose()
 }

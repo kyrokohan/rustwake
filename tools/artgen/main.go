@@ -58,6 +58,10 @@ var sheets = []sheet{
 	{name: "floor-3", frames: 1, draw: floor3},
 	{name: "ceiling-3", frames: 1, draw: ceiling3},
 	{name: "floor-exit", frames: 1, draw: floorExit},
+
+	{name: "logo", frames: 1, draw: logo},
+	{name: "icon-health", frames: 1, draw: iconHealth},
+	{name: "icon-ammo", frames: 1, draw: iconAmmo},
 }
 
 func main() {
@@ -77,7 +81,7 @@ func main() {
 		for i := range frames {
 			frames[i] = s.draw(i)
 		}
-		if frames[0].w == frames[0].h && frames[0].w <= 16 && s.frames == 1 && s.name != "lamp" {
+		if frames[0].w == frames[0].h && frames[0].w >= 8 && frames[0].w <= 16 && s.frames == 1 {
 			big := tiled(frames[0])
 			if big.w < 32 {
 				big = tiled(big)

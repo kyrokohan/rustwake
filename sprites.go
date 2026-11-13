@@ -39,6 +39,9 @@ var (
 		'x': strip("crate", 1, 0.78, 0),
 		'l': strip("lamp", 1, 0.2, wallHeight-0.2),
 	}
+	// What is drawn on the screen, not in the world: the game's name, and the marks beside
+	// the numbers on the status strip.
+	logo, healthIcon, ammoIcon = art("logo"), art("icon-health"), art("icon-ammo")
 	// The weapon at rest, and the three frames of a shot.
 	weaponFrames = [4]*bitmap.Bitmap{art("weapon-0"), art("weapon-1"), art("weapon-2"), art("weapon-3")}
 )
