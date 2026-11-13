@@ -69,6 +69,7 @@ func (g *game) updatePlayer(dt float64, in *engine.Input) {
 	}
 	// Move stops the box at walls and slides it along them, however long the frame took.
 	moved, _, _ := g.lvl.grid.Move(box(g.pos, bodyRadius), move.Normalize().Scale(walkSpeed*dt))
+	g.walked += moved.Center().Distance(g.pos)
 	g.pos = moved.Center()
 
 	if in.IsDown(' ') && g.cool <= 0 && g.ammo > 0 {
@@ -79,6 +80,7 @@ func (g *game) updatePlayer(dt float64, in *engine.Input) {
 			e.hurt = 0.1
 			if e.hp <= 0 {
 				g.enemies = slices.DeleteFunc(g.enemies, func(o *enemy) bool { return o == e })
+				g.wrecks = append(g.wrecks, wreck{look: e.look, pos: e.pos})
 			}
 		}
 	}

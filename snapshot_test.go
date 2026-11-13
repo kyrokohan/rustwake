@@ -34,7 +34,7 @@ func TestSnapshot(t *testing.T) {
 		},
 		"4-sentry-fire": func(g *game) {
 			g.pos, g.yaw = geometry.Vector2{X: 18.5, Y: 2.5}, math.Pi/4
-			g.flash, g.pain = 0.05, 0.1
+			g.flash, g.pain, g.cool = 0.05, 0.1, fireEvery-0.01
 			g.bolts = append(g.bolts, bolt{pos: geometry.Vector2{X: 19.6, Y: 3.6}})
 		},
 		"5-pickups-exit": func(g *game) {

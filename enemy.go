@@ -10,6 +10,19 @@ const (
 	boltSpeed  = 5.0 // tiles a second
 	boltDamage = 15
 	boltReach  = 0.35 // how near the player a bolt must pass to hit
+	strikeTime = 0.15 // seconds a machine shows its strike after it attacks
+	windUpTime = 0.25 // seconds before an attack that it shows the wind-up
+	dieTime    = 0.5  // seconds a machine takes to fall apart
+)
+
+// The frames of a machine's strip: four of a walk, two of an attack, four of its end.
+const (
+	walkFrames  = 4
+	windUpFrame = 4
+	strikeFrame = 5
+	dieFrame    = 6
+	dieFrames   = 4
+	allFrames   = 10
 )
 
 // kind is what the machines of one sort have in common.
@@ -26,18 +39,47 @@ type kind struct {
 
 // kinds are the machines, by the rune that puts one on a map.
 var kinds = map[rune]kind{
-	'c': {look: look{pic: art("crawler"), height: 0.7}, health: 2, speed: 2.2, radius: 0.3, reach: 0.85, every: 0.8, damage: 10},
-	's': {look: look{pic: art("sentry"), height: 0.95}, health: 3, speed: 1.2, radius: 0.22, reach: 7, every: 1.6, ranged: true},
+	'c': {look: strip("crawler", allFrames, 0.7, 0), health: 2, speed: 2.2, radius: 0.3, reach: 0.85, every: 0.8, damage: 10},
+	's': {look: strip("sentry", allFrames, 0.95, 0), health: 3, speed: 1.2, radius: 0.22, reach: 7, every: 1.6, ranged: true},
 }
 
 type enemy struct {
 	kind
-	pos   geometry.Vector2
-	hp    int
-	awake bool             // it has seen the player
-	goal  geometry.Vector2 // where it last saw the player
-	wait  float64          // seconds until it may attack again
-	hurt  float64          // seconds left of the flash of a hit
+	pos    geometry.Vector2
+	hp     int
+	awake  bool             // it has seen the player
+	aiming bool             // the player is in sight and in reach
+	goal   geometry.Vector2 // where it last saw the player
+	wait   float64          // seconds until it may attack again
+	hurt   float64          // seconds left of the flash of a hit
+}
+
+// frame is the picture of its strip a machine shows at a time on the game's clock: the
+// strike just after an attack, the wind-up just before one, and otherwise its walk, which
+// a sleeping machine stands still in.
+func (e *enemy) frame(clock float64) int {
+	switch {
+	case e.wait > e.every-strikeTime:
+		return strikeFrame
+	case e.aiming && e.wait < windUpTime:
+		return windUpFrame
+	case e.awake:
+		return int(clock*7) % walkFrames
+	}
+	return 0
+}
+
+// wreck is a machine that has been shot down: it falls apart where it stood, and what is
+// left stays on the floor, in nobody's way.
+type wreck struct {
+	look
+	pos geometry.Vector2
+	age float64 // seconds since it was shot down
+}
+
+// frame is the picture a wreck shows, the last of them from dieTime on.
+func (w wreck) frame() int {
+	return dieFrame + min(dieFrames-1, int(w.age/dieTime*dieFrames))
 }
 
 // bolt is a sentry's shot, slow enough to step out of the way of.
@@ -48,6 +90,9 @@ type bolt struct {
 // updateEnemies runs every machine: it sleeps until it sees the player, attacks when the
 // player is in sight and in reach, and otherwise walks to where it last saw them.
 func (g *game) updateEnemies(dt float64) {
+	for i := range g.wrecks {
+		g.wrecks[i].age += dt
+	}
 	for _, e := range g.enemies {
 		e.wait -= dt
 		e.hurt -= dt
@@ -63,7 +108,8 @@ func (g *game) updateEnemies(dt float64) {
 		}
 
 		to := e.goal.Sub(e.pos)
-		if sees && to.Length() <= e.reach {
+		e.aiming = sees && to.Length() <= e.reach
+		if e.aiming {
 			if e.wait <= 0 {
 				e.wait = e.every
 				if e.ranged {

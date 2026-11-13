@@ -12,27 +12,30 @@ import (
 	"glonk.dev/mesh"
 )
 
-// assets are the game's pictures, PNG files in which a see-through pixel is a hole. Put
-// another PNG of any size in a file's place and the game draws that instead.
+// assets are the game's pictures, PNG files in which a see-through pixel is a hole. They
+// are drawn by tools/artgen; a PNG made by hand can take the place of any of them.
 //
 //go:embed assets/*.png
 var assets embed.FS
 
-// look is how a thing in the world is drawn: its picture, how tall it stands in tiles and
-// how far off the floor. Its width follows from the shape of the picture.
+// look is how a thing in the world is drawn: its picture, which holds the frames of its
+// animation side by side, how tall it stands in tiles and how far off the floor. Its
+// width follows from the shape of a frame.
 type look struct {
 	pic          *bitmap.Bitmap
+	frames       int
 	height, lift float64
 }
 
 var (
-	boltLook    = look{pic: art("bolt"), height: 0.15, lift: 0.4}
-	exitLook    = look{pic: art("exit"), height: wallHeight}
+	boltLook    = strip("bolt", 2, 0.16, 0.42)
+	exitLook    = strip("exit", 2, wallHeight, 0)
 	pickupLooks = map[rune]look{
-		'h': {pic: art("health"), height: 0.3},
-		'a': {pic: art("ammo"), height: 0.3},
+		'h': strip("health", 2, 0.3, 0),
+		'a': strip("ammo", 2, 0.3, 0),
 	}
-	weaponIdle, weaponFiring = art("weapon"), art("weapon-fire")
+	// The weapon at rest, and the three frames of a shot.
+	weaponFrames = [4]*bitmap.Bitmap{art("weapon-0"), art("weapon-1"), art("weapon-2"), art("weapon-3")}
 )
 
 // art returns the picture assets/name.png. The pictures are compiled into the program, so
@@ -49,30 +52,40 @@ func art(name string) *bitmap.Bitmap {
 	return pic
 }
 
-// stand draws a thing upright at a spot on the grid, turned to the camera, at the given
-// brightness. Every pixel has the thing's distance from the camera as its depth, which is
-// the depth the walls are drawn with, so a wall or a nearer thing hides it, in whole or in
-// part, whatever the order of drawing.
-func stand(c *engine.Canvas, cam mesh.Camera, l look, at geometry.Vector2, bright float64) {
+// strip returns the look of a thing whose picture holds the given number of frames.
+func strip(name string, frames int, height, lift float64) look {
+	pic := art(name)
+	if pic.Width()%frames != 0 {
+		panic(fmt.Sprintf("assets/%s.png is %d pixels wide, which is not %d frames", name, pic.Width(), frames))
+	}
+	return look{pic: pic, frames: frames, height: height, lift: lift}
+}
+
+// stand draws one frame of a thing upright at a spot on the grid, turned to the camera,
+// at the given brightness. Every pixel has the thing's distance from the camera as its
+// depth, which is the depth the walls are drawn with, so a wall or a nearer thing hides
+// it, in whole or in part, whatever the order of drawing.
+func stand(c *engine.Canvas, cam mesh.Camera, l look, frame int, at geometry.Vector2, bright float64) {
 	foot := geometry.Vector3{X: at.X, Y: l.lift, Z: at.Y}
 	// As Mesh.DrawShadedPixels does it: onto the grid of cells the canvas belongs to, and
 	// then y doubled to rows of pixels. That is what puts a thing's feet on the floor.
 	x, bottom, ok := cam.Project(foot, c.Width(), c.Height()/2)
-	if !ok || l.pic.Height() == 0 {
+	if !ok || l.frames == 0 {
 		return
 	}
 	_, top, _ := cam.Project(foot.Add(geometry.Vector3{Y: l.height}), c.Width(), c.Height()/2)
 	bottom, top = 2*bottom, 2*top
+	across, down := l.pic.Width()/l.frames, l.pic.Height()
 	h := bottom - top
-	w := h * float64(l.pic.Width()) / float64(l.pic.Height())
+	w := h * float64(across) / float64(down)
 	left := x - w/2
 	depth := foot.Sub(cam.Position).Dot(cam.Forward())
 
 	// A pixel is drawn when its middle is on the picture, which is from round to round.
 	for py := max(0, int(math.Round(top))); py < min(c.Height(), int(math.Round(bottom))); py++ {
-		v := int((float64(py) + 0.5 - top) / h * float64(l.pic.Height()))
+		v := int((float64(py) + 0.5 - top) / h * float64(down))
 		for px := max(0, int(math.Round(left))); px < min(c.Width(), int(math.Round(left+w))); px++ {
-			u := int((float64(px) + 0.5 - left) / w * float64(l.pic.Width()))
+			u := frame*across + int((float64(px)+0.5-left)/w*float64(across))
 			if color := l.pic.At(u, v); color != (engine.Color{}) {
 				c.SetDepth(px, py, depth, engine.Shade(color, bright))
 			}

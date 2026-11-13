@@ -47,8 +47,12 @@ type game struct {
 	pain         float64 // seconds left of showing a hit
 
 	enemies []*enemy
+	wrecks  []wreck
 	bolts   []bolt
 	pickups []spawn // the health and ammo still lying on the map
+
+	clock  float64 // seconds played, which the animations run on
+	walked float64 // tiles walked, which the weapon bobs to
 }
 
 // newGame returns the game main runs: the first map, behind the title menu.
@@ -77,7 +81,7 @@ func (g *game) restart(n int) {
 func (g *game) enter(l *level) {
 	g.lvl, g.pos, g.yaw = l, l.start, 0
 	g.cool, g.flash, g.pain = 0, 0, 0
-	g.enemies, g.bolts, g.pickups = nil, nil, nil
+	g.enemies, g.wrecks, g.bolts, g.pickups = nil, nil, nil, nil
 	for _, s := range l.spawns {
 		if k, ok := kinds[s.kind]; ok {
 			g.enemies = append(g.enemies, &enemy{kind: k, pos: s.at, hp: k.health})
@@ -100,6 +104,7 @@ func (g *game) Update(dt float64, in *engine.Input) error {
 	g.updateEnemies(dt)
 	g.updateBolts(dt)
 	g.collect()
+	g.clock += dt
 
 	if g.health <= 0 {
 		g.health = 0
@@ -154,19 +159,24 @@ func (g *game) drawWorld(fb *engine.FrameBuffer) {
 	// The exit, the pickups and the bolts give light of their own, so they are drawn as
 	// bright as they are. A machine is lit as the walls are, but for the flash of a hit.
 	g.lvl.mesh.DrawShadedPixels(c, cam, lit...)
-	stand(c, cam, exitLook, g.lvl.exit, 1)
+	pulse := int(g.clock*3) % 2
+	stand(c, cam, exitLook, pulse, g.lvl.exit, 1)
 	for _, p := range g.pickups {
-		stand(c, cam, pickupLooks[p.kind], p.at, 1)
+		stand(c, cam, pickupLooks[p.kind], pulse, p.at, 1)
 	}
 	for _, b := range g.bolts {
-		stand(c, cam, boltLook, b.pos, 1)
+		stand(c, cam, boltLook, int(g.clock*12)%2, b.pos, 1)
+	}
+	for _, w := range g.wrecks {
+		w.lift *= max(0, 1-w.age/dieTime) // what flew comes down
+		stand(c, cam, w.look, w.frame(), w.pos, max(brightness(lit, cam.Position, w.pos), 1-w.age/dieTime))
 	}
 	for _, e := range g.enemies {
 		bright := 1.0
 		if e.hurt <= 0 {
 			bright = brightness(lit, cam.Position, e.pos)
 		}
-		stand(c, cam, e.look, e.pos, bright)
+		stand(c, cam, e.look, e.frame(g.clock), e.pos, bright)
 	}
 
 	c.Set(c.Width()/2, c.Height()/2, engine.RGB(120, 255, 160)) // the crosshair

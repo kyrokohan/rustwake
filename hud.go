@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"math"
 
 	"glonk.dev/engine"
 	"glonk.dev/widget"
@@ -20,15 +21,21 @@ var help = []string{
 	"Space fire   Esc pause",
 }
 
-// drawWeapon draws the weapon at the bottom middle of the view, larger in a larger window.
-// While it fires it shows its firing picture, and kicks down.
+// drawWeapon draws the weapon at the bottom middle of the view, a good quarter of its
+// width, with its lower third below the edge so that it does not hide what is aimed at.
+// A shot plays its three frames, one every shotFrame seconds, and the weapon bobs as the
+// player walks.
 func (g *game) drawWeapon(c *engine.Canvas) {
-	pic, size, kick := weaponIdle, max(1, c.Width()/70), 0
-	if g.flash > 0 {
-		pic, kick = weaponFiring, size
+	const shotFrame = 0.08
+	frame := 0
+	if since := fireEvery - g.cool; since < 3*shotFrame { // cool counts down from fireEvery at a shot
+		frame = 1 + int(since/shotFrame)
 	}
-	w, h := pic.Width()*size, pic.Height()*size
-	pic.DrawScaled(c, (c.Width()-w)/2, c.Height()-h+kick, w, h)
+	pic := weaponFrames[frame]
+	w := c.Width() * 28 / 100
+	h := w * pic.Height() / pic.Width()
+	bob := int(math.Abs(math.Sin(g.walked*5)) * float64(h) / 14)
+	pic.DrawScaled(c, (c.Width()-w)/2, c.Height()-h*2/3+bob, w, h)
 }
 
 // drawHUD draws the panel at the bottom left: health as a number and a bar, and the ammo.

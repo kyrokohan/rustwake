@@ -146,16 +146,16 @@ func TestWallsHideThings(t *testing.T) {
 	walls := pixels(c)
 
 	crawler := kinds['c'].look
-	stand(c, cam, crawler, geometry.Vector2{X: 2.5, Y: 4.5}, 1)
+	stand(c, cam, crawler, 0, geometry.Vector2{X: 2.5, Y: 4.5}, 1)
 	if !slices.Equal(pixels(c), walls) {
 		t.Error("a crawler behind the wall is drawn")
 	}
-	stand(c, cam, crawler, geometry.Vector2{X: 2.5, Y: 2.5}, 1)
+	stand(c, cam, crawler, 0, geometry.Vector2{X: 2.5, Y: 2.5}, 1)
 	if slices.Equal(pixels(c), walls) {
 		t.Error("a crawler in front of the wall is not drawn")
 	}
-	stand(c, cam, crawler, geometry.Vector2{X: 2.5, Y: 0.5}, 1)
-	stand(c, cam, crawler, geometry.Vector2{X: 2.5, Y: 1.5}, 1)
+	stand(c, cam, crawler, 0, geometry.Vector2{X: 2.5, Y: 0.5}, 1)
+	stand(c, cam, crawler, 0, geometry.Vector2{X: 2.5, Y: 1.5}, 1)
 	// Neither a thing behind the camera nor one on top of it may panic or hang.
 }
 
