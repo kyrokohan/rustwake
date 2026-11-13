@@ -62,6 +62,9 @@ var sheets = []sheet{
 	{name: "logo", frames: 1, draw: logo},
 	{name: "icon-health", frames: 1, draw: iconHealth},
 	{name: "icon-ammo", frames: 1, draw: iconAmmo},
+	{name: "font", frames: fontFrames, draw: font},
+	{name: "cursor", frames: 2, draw: cursor},
+	{name: "splat", frames: 4, draw: splat},
 }
 
 func main() {
