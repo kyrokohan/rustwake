@@ -30,6 +30,9 @@ type sheet struct {
 var sheets = []sheet{
 	{name: "crawler", frames: 10, draw: crawler},
 	{name: "sentry", frames: 10, draw: sentry},
+	{name: "drone", frames: 10, draw: drone},
+	{name: "hauler", frames: 10, draw: hauler},
+	{name: "overseer", frames: 10, draw: overseer},
 	{name: "weapon", frames: 4, draw: weapon, apart: true},
 	{name: "health", frames: 2, draw: health},
 	{name: "ammo", frames: 2, draw: ammo},
