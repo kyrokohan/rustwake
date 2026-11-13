@@ -5,6 +5,7 @@ import (
 	"embed"
 	"fmt"
 	"math"
+	"strings"
 
 	"glonk.dev/bitmap"
 	"glonk.dev/engine"
@@ -42,8 +43,19 @@ var (
 	// What is drawn on the screen, not in the world: the game's name, and the marks beside
 	// the numbers on the status strip.
 	logo, healthIcon, ammoIcon = art("logo"), art("icon-health"), art("icon-ammo")
+	// The game's letters, the mark beside the chosen item of a menu, and blood for the glass.
+	font, cursor, splats = art("font"), art("cursor"), art("splat")
 	// The weapon at rest, and the three frames of a shot.
 	weaponFrames = [4]*bitmap.Bitmap{art("weapon-0"), art("weapon-1"), art("weapon-2"), art("weapon-3")}
+)
+
+// How the strips that are drawn on the screen are cut up.
+const (
+	fontFrames   = 'Z' - ' ' + 1 // a letter for every character from the space to Z, in order
+	cursorFrames = 2
+	splatFrames  = 4
+	letterWidth  = 6 // pixels from one letter to the next: five of letter and one of gap
+	letterHeight = 7
 )
 
 // art returns the picture assets/name.png. The pictures are compiled into the program, so
@@ -87,7 +99,7 @@ func stand(c *engine.Canvas, cam mesh.Camera, l look, frame int, at geometry.Vec
 	h := bottom - top
 	w := h * float64(across) / float64(down)
 	left := x - w/2
-	depth := foot.Sub(cam.Position).Dot(cam.Forward())
+	depth := foot.Sub(cam.Position).Dot(cam.Look()) // along the way the camera points, which tips when the player falls
 
 	// A pixel is drawn when its middle is on the picture, which is from round to round.
 	for py := max(0, int(math.Round(top))); py < min(c.Height(), int(math.Round(bottom))); py++ {
@@ -112,4 +124,38 @@ func brightness(lights []mesh.Light, eye geometry.Vector3, at geometry.Vector2) 
 		dark *= 1 - min(1, max(0, l.Brightness(p, toward)))
 	}
 	return 1 - dark
+}
+
+// blit draws one frame of a strip on the screen with its top left at (x, y), each of its
+// pixels a square of scale pixels, in its own colors or, given a tint, all in that one. It
+// is for what is on the screen and not in the world, so it takes no notice of depth.
+func blit(c *engine.Canvas, pic *bitmap.Bitmap, frames, frame, x, y, scale int, tint engine.Color) {
+	across := pic.Width() / frames
+	for v := range pic.Height() {
+		for u := range across {
+			color := pic.At(frame*across+u, v)
+			if color == (engine.Color{}) {
+				continue
+			}
+			if tint != (engine.Color{}) {
+				color = tint
+			}
+			c.FillRect(x+u*scale, y+v*scale, scale, scale, color)
+		}
+	}
+}
+
+// write draws text in the game's letters with its top left at (x, y). The letters are
+// capitals; a character that has no letter is left as a gap.
+func write(c *engine.Canvas, x, y, scale int, color engine.Color, text string) {
+	for i, r := range []rune(strings.ToUpper(text)) {
+		if r >= ' ' && r <= 'Z' {
+			blit(c, font, fontFrames, int(r-' '), x+i*letterWidth*scale, y, scale, color)
+		}
+	}
+}
+
+// span is how many pixels across write draws text.
+func span(text string, scale int) int {
+	return (len([]rune(text))*letterWidth - 1) * scale
 }

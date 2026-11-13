@@ -355,3 +355,108 @@ func BenchmarkDraw(b *testing.B) {
 		})
 	}
 }
+
+// The last hit does not bring the menu: first the player goes down, with the plant still
+// running and their keys doing nothing, and the scene can be skipped only once its start
+// has been seen.
+func TestDyingIsASceneBeforeTheMenu(t *testing.T) {
+	g := play(corridor)
+	near := g.enemies[0]
+	g.damage(maxHealth)
+	hold(t, g, frame)
+	if g.screen != dying {
+		t.Fatalf("screen is %v after the last hit, wanted dying", g.screen)
+	}
+
+	at, yaw, machine := g.pos, g.yaw, near.pos
+	hold(t, g, skipAfter/2, 'w', 'e', engine.KeyEnter)
+	if g.screen != dying {
+		t.Errorf("screen is %v after Enter in the first %v seconds, wanted still dying", g.screen, skipAfter)
+	}
+	if g.pos != at || g.yaw != yaw {
+		t.Errorf("the dying player moved from %v, %v to %v, %v", at, yaw, g.pos, g.yaw)
+	}
+	if near.pos == machine {
+		t.Error("the machine stood still while the player was dying")
+	}
+	if eye := g.camera().Position.Y; eye >= eyeHeight {
+		t.Errorf("the eye is at %v, wanted lower than %v as the player goes down", eye, eyeHeight)
+	}
+
+	hold(t, g, skipAfter)
+	hold(t, g, frame, engine.KeyEnter)
+	if g.screen != dead {
+		t.Errorf("screen is %v after Enter once the start was seen, wanted dead", g.screen)
+	}
+
+	g = play(corridor)
+	g.damage(maxHealth)
+	hold(t, g, deathTime+2*frame)
+	if g.screen != dead {
+		t.Errorf("screen is %v after the whole scene, wanted dead", g.screen)
+	}
+}
+
+func TestTheStatsCountAGameAndStartOver(t *testing.T) {
+	g := play(corridor)
+	hold(t, g, 2*fireEvery+frame, ' ') // the two shots a crawler takes
+	if g.kills != 1 || g.played == 0 {
+		t.Errorf("after wrecking one machine: %d wrecked in %v seconds", g.kills, g.played)
+	}
+	g.restart(0)
+	if g.kills != 0 || g.played != 0 {
+		t.Errorf("after a restart: %d wrecked in %v seconds, wanted nothing", g.kills, g.played)
+	}
+}
+
+// drawn counts the pixels of a canvas that have something on them.
+func drawn(c *engine.Canvas) int {
+	n := 0
+	for _, color := range pixels(c) {
+		if color != (engine.Color{}) {
+			n++
+		}
+	}
+	return n
+}
+
+func TestWriteDrawsItsLettersAndSkipsTheRest(t *testing.T) {
+	fb, _ := engine.NewFrameBuffer(40, 8)
+	c := fb.Canvas()
+	write(c, 0, 0, 1, engine.RGB(255, 255, 255), "a")
+	one := drawn(c)
+	if one == 0 {
+		t.Fatal("write drew nothing for a letter it has")
+	}
+	if span("a", 1) != 5 || span("ab", 2) != 22 {
+		t.Errorf("span is %d for one letter and %d for two at twice the size, wanted 5 and 22", span("a", 1), span("ab", 2))
+	}
+	write(c, 0, 0, 1, engine.RGB(255, 255, 255), "a~é\x00") // none of the rest has a letter
+	if drawn(c) != one {
+		t.Errorf("write drew %d pixels for characters it has no letter for", drawn(c)-one)
+	}
+}
+
+// Every menu has to fit the view, above the status strip, in a small window and in a
+// large one.
+func TestEveryMenuFitsTheWindow(t *testing.T) {
+	for _, size := range [][2]int{{80, 24}, {200, 60}} {
+		fb, _ := engine.NewFrameBuffer(size[0], size[1])
+		for s := range menus {
+			g := newGame(len(levels) - 1)
+			g.kills, g.played = 123, 3599
+			g.show(s)
+			fb.Clear()
+			c := fb.Canvas()
+			g.drawWorld(c)
+			if under, view := g.drawMenu(c), c.Height()-2*stripRows; under > view {
+				t.Errorf("screen %v at %dx%d: the menu ends at row %d of a view of %d", s, size[0], size[1], under, view)
+			}
+			fb.Clear()
+			g.Draw(fb)
+			if strings.TrimSpace(fb.String()) == "" {
+				t.Errorf("screen %v at %dx%d: the frame is blank", s, size[0], size[1])
+			}
+		}
+	}
+}

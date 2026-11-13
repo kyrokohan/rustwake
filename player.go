@@ -30,9 +30,23 @@ func down(in *engine.Input, letter rune) bool {
 	return in.IsDown(engine.Key(letter)) || in.IsDown(engine.Key(unicode.ToUpper(letter)))
 }
 
-// camera is the player's view.
+// camera is the player's view: from eye height, level, until they fall, when it sinks to
+// the floor and tips up.
 func (g *game) camera() mesh.Camera {
-	return mesh.Camera{Position: geometry.Vector3{X: g.pos.X, Y: eyeHeight, Z: g.pos.Y}, Yaw: g.yaw, FOV: fov}
+	down := g.fallen()
+	return mesh.Camera{
+		Position: geometry.Vector3{X: g.pos.X, Y: eyeHeight - (eyeHeight-floorEye)*down, Z: g.pos.Y},
+		Yaw:      g.yaw,
+		Pitch:    fallPitch * down,
+		FOV:      fov,
+	}
+}
+
+// fallen is how far the player has gone down, from 0, standing, to 1, on the floor: slow
+// to start and slow to settle.
+func (g *game) fallen() float64 {
+	t := min(1, g.fall/fallTime)
+	return t * t * (3 - 2*t)
 }
 
 // facing is the way the player looks, on the grid.
@@ -82,6 +96,7 @@ func (g *game) updatePlayer(dt float64, in *engine.Input) {
 			if e.hp <= 0 {
 				g.enemies = slices.DeleteFunc(g.enemies, func(o *enemy) bool { return o == e })
 				g.wrecks = append(g.wrecks, wreck{look: e.look, pos: e.pos})
+				g.kills++
 			}
 		}
 	}
@@ -105,7 +120,7 @@ func (g *game) target() *enemy {
 
 // damage takes n from the player's health and shows the hit.
 func (g *game) damage(n int) {
-	g.health -= n
+	g.health = max(0, g.health-n)
 	g.pain = painTime
 }
 

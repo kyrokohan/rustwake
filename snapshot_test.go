@@ -19,8 +19,8 @@ import (
 //
 //	RUSTWAKE_SNAP=/some/folder go test -run TestSnapshot .
 //
-// There is the title, the start of a map in each zone, and each kind of machine seen from
-// two tiles away. A pixel of the canvas is a square, and any other character is a mark.
+// There is the title, the start of a map in each zone, each kind of machine seen from two
+// tiles away, the menus and the player's death. A pixel of the canvas is a square, and any other character is a mark.
 func TestSnapshot(t *testing.T) {
 	dir := os.Getenv("RUSTWAKE_SNAP")
 	if dir == "" {
@@ -45,6 +45,26 @@ func TestSnapshot(t *testing.T) {
 				break
 			}
 		}
+	}
+
+	// The menus, and the death: as it starts, with the blood on the glass, as it ends, and
+	// the menu that follows it.
+	for name, s := range map[string]screen{"menu-paused": paused, "menu-won": won} {
+		g := newGame(6)
+		g.kills, g.played = 41, 754
+		g.show(s)
+		shots[name] = g
+	}
+	for name, t := range map[string]float64{"death-1": 0.3, "death-2": 1.1, "death-3": 2.1, "menu-dead": 3.5} {
+		g := newGame(0)
+		g.screen = playing
+		faced(g, 'c')
+		g.kills, g.played = 7, 95
+		g.health, g.screen, g.fall, g.gore = 0, dying, t, newGore(7)
+		if t > deathTime {
+			g.show(dead)
+		}
+		shots[name] = g
 	}
 
 	for name, g := range shots {
